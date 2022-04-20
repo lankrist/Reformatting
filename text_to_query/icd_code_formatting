@@ -1,0 +1,106 @@
+#concatanate characters to multiple character strings for SQL query
+#Receive table of diagnoses by row: A column indicates the condition, and another column indicates all the associated diagnosis
+#Diagnosis codes is in quotation; version with diagnosis code not in quotation will be scripted elsewhere
+
+library(purrr)
+library(magrittr)
+library(stringr)
+
+#redcap comorbid names
+redcap_fields <- c('asthma
+rhino_conjunvitus
+food_allergy
+atopic_dermatitis
+insect_allergy
+anaphylaxis
+malignancy
+autoimmun_cond
+gastro_cond
+recurrent_infect
+vit_d_def
+smoking
+alcohol
+sub_abuse')
+
+redcap_fields <- redcap_fields  %>% strsplit("\n")
+redcap_fields <- redcap_fields %>% unlist
+
+#prepare SQL column names within pivot tables
+#paste0("[", paste0(redcap_fields, collapse = '], ['), "]")
+
+#Comorbidities for Allergy study
+comorbid <- c("Asthma
+Allergic rhino-conjunctivitis
+Food Allergy
+Atopic Dermatitis
+Insect Allergy
+Anaphylaxis
+Malignancy (solid tumor, hematologic)
+Autoimmune Conditions
+Gastrointestinal Conditions
+Recurrent Infection
+Vitamin D Deficiency
+Smoking
+Alcohol
+Substance Abuse")
+
+comorbid <- comorbid %>% strsplit("\n")
+comorbid <- comorbid %>% unlist
+paste0("[", paste0(comorbid, collapse = '], ['), "]")
+
+#prepare SQL pivot table columns
+paste0(paste0('[', comorbid, '] AS [', redcap_fields, ']'), collapse = ", ")
+
+#ICD Codes
+icd <- 
+c('‘J45.’ 
+‘J31.’, ‘J00.’, ‘J30’
+‘Z91.’, ‘T78.’
+‘L30.’, ‘B00.’, ‘H60.’, ‘H01.’
+‘T63.’, ‘Z91.’
+‘T78.’, ‘T88.’, ‘T50.’, ‘T80.’
+‘C80.’, ‘C95.’, ‘D39.’, ‘Z85.’, ‘C76.’, ‘C67.’, ‘C71.’, ‘C38.’, ‘C53.’, ‘C72.’, ‘C18.’, ‘C80.’, ‘C26.’, ‘C57.’, ‘C96.’, ‘C56.’, ‘C41.’, ‘C50.’, ‘C19.’, ‘C15.’, ‘C22.’, ‘C34.’, ‘C15.’, ‘C25.’, ‘C07.’, ‘C61.’, ‘C44.’, ‘C17.’, ‘C16.’, ‘C62.’, ‘C73.’, ‘C52.’, ‘C51.’, ‘C56.’, ‘C78.’, ‘C79.’, ‘C77.’,    
+‘E27.’, ‘G90.’, ‘L13.’, ‘M35.’, ‘K83.’, ‘L30.’, ‘E10.’, ‘K76.’, ‘D89.’, ‘G04.’, ‘G93.’, ‘K63.’, ‘Q87.’, ‘K29.’, ‘K92.’, ‘D59.’, ‘D68.’, ‘K75.’, ‘E16.’, ‘E06.’, ‘M60.’, ‘H83.’, ‘H16.’, ‘J04.’, ‘I51.’, ‘G72.’, ‘D70.’, ‘N70.’, ‘H55.’, ‘H46.’, ‘K86.’, ‘D61.’, ‘E21.’, ‘E31.’, ‘L98.’, ‘J84.’, ‘D69.’, ‘D89.’, ‘H35.’, ‘K81.’, ‘D69.’, ‘E06.’, ‘E03.’, ‘D59.’, ‘E27.’, ‘E31.’, ‘E13.’, ‘Z86.’, ‘K75.’, ‘L93.’, ‘D89.’, ‘J84.’, ‘E13.’, ‘O99.’, ‘N05.’, ‘D89.’, ‘E21.’, ‘G37.’, ‘E31.’, ‘K75.’,  
+‘K50.’, ‘K92.’, ‘K28.’, ‘Z87.19’
+‘B99.’, ‘Z86.’, ‘A49.’, ‘J98.’, ‘J06.’, ‘B34.’, ‘Z86.’, ‘Z87.01’, ‘N39.’
+‘E55.’, ‘R79.’
+‘F17.’, ‘Z87.891’
+‘F10.’, 
+‘F19.’, ‘F15.’, ‘F14.’, ‘F12.’, ‘F11.’, ‘F13.’')
+
+icds <- strsplit(gsub("’", "%\'", gsub("‘", "\'", icd)), "\n") %>% as.list
+icds <- lapply(icds, strsplit, split = ",")
+icds <- lapply(icds[[1]], trimws)
+
+icds <- lapply(icds, function(x) x[nzchar(x)])
+
+stricd = "PrimaryICD10Code LIKE "
+
+whereicd <- function(mainstr, stradd = stricd){
+  paste0(stradd, mainstr)
+}
+
+#nested_lapply <- function(data, fun, ...) {lapply(data, function(sublist) { lapply(sublist, fun) })}
+ 
+icds <- lapply(icds, whereicd, stradd = stricd)
+
+#lapply(icds, whereicd, stradd = stricd); nested_lapply(icds, whereicd, stradd = stricd)
+
+icds <- sapply(icds, paste0, collapse = " OR ") %>% unlist
+
+comorbidtab <- data.frame(redcap_fields, comorbid, icds)
+
+comorbidtab[2,]
+
+#Combine the 
+SQL_str1 = 'SELECT DiagnosisDurableKey, DiagnosisEpicId, [Name] Diagnosis_name, PrimaryICD10Code, ReferenceBillingCode, ReferenceBillingCodeSet, ' 
+SQL_str2 = '[Comorbidity] FROM MDW_DEEP.Dimensional.DiagnosisDim WHERE ' 
+
+comorbidtab$SQL_q = paste0(SQL_str1,  '\'', comorbidtab$comorbid, '\' ', SQL_str2, comorbidtab$icds)
+
+comorbidtab$SQL_q[2]
+
+write.csv(comorbidtab, "~/Documents/Projects/Data_Request/Urticaria_khokhar/urticaria_comorbi_icd.csv")
+
+write(paste0(comorbidtab$SQL_q, collapse =  " UNION "), "~/Documents/Projects/Data_Request/Urticaria_khokhar/comorbidity_sql_query.txt")
+
